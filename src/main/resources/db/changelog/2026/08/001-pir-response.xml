@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        SCRUM-58 file-trace: pir_response is PIR's only domain table and the write-ahead
+        filename ledger / system of record for every initial ACK/NACK on the payments leg.
+        One row per arrival, committed BEFORE the response file is staged.
+
+        route_id IS part of identity (A-45 cross-route twin lesson): the same
+        (client, msgId) arriving on onhost-req-pay and on fint-resp-pay are distinct
+        arrivals with distinct files. reason closes A-48 (the headerless NACK reason was
+        never persisted); accepted_count/total_count give the per-file acceptance ratio at
+        a glance (spec 11.2 Tier-1). written_at NULL after commit = staged-not-written
+        stuck signal.
+
+        onFail="CONTINUE", NEVER MARK_RAN. CIR's 003 uses MARK_RAN, and that shape has
+        cost this project two defects (A-79, A-81): MARK_RAN records the skip
+        PERMANENTLY, so a database that was merely not-yet-ready at the moment of the
+        check never receives the change at all. CONTINUE leaves the changeset unlogged
+        and re-evaluated on the next run, which is what a re-run guard actually wants.
+        dcre_pay is a new database, so this is a first create rather than a retrofit and
+        the guard should never fire; it is there for the interrupted-pod case.
+    -->
+    <changeSet id="pir-001-response" author="dcre">
+        <preConditions onFail="CONTINUE">
+            <not><tableExists tableName="pir_response"/></not>
+        </preConditions>
+        <createTable tableName="pir_response">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="arrival_id" type="UUID">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uq_pir_response_arrival"/>
+            </column>
+            <column name="client" type="VARCHAR(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="msg_id" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="route_id" type="VARCHAR(64)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="outcome" type="VARCHAR(4)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="file_name" type="VARCHAR(512)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uq_pir_response_file"/>
+            </column>
+            <column name="reason" type="VARCHAR(64)"/>
+            <column name="accepted_count" type="INT"/>
+            <column name="total_count" type="INT"/>
+            <column name="written_at" type="TIMESTAMPTZ"/>
+            <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="pir_response"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

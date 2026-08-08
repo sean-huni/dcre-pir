@@ -1,0 +1,34 @@
+# 12FactorApp: committed working dev defaults; env overrides. (yml-only rule, configuration.md p19)
+spring:
+  # SCRUM-42: per-client exchange layout, shipped once as a shared classpath resource in
+  # platform-batch and imported by each writer service; drives the ExchangeLayout bean.
+  config:
+    import: classpath:dcre-exchange-layout.yml
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    # dcre_pay, NOT dcre_col: the payments split gives this family its own
+    # database, and that database is now the family discriminator.
+    url: ${DCRE_PAY_DB_URL:jdbc:postgresql://localhost:26257/dcre_pay?sslmode=disable}
+    username: ${DCRE_PAY_DB_USER:root}
+    password: ${DCRE_PAY_DB_PASSWORD:}
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+    # Per-service migration history (same isolation idea as PIR_BATCH_)
+    database-change-log-table: pir_databasechangelog
+    database-change-log-lock-table: pir_databasechangeloglock
+
+dcre:
+  # SCRUM-88 (M12): persistent JDBC JobRepository prefix, re-homed off the dead
+  # spring.batch.jdbc.table-prefix (Boot 4.1 no longer binds it) onto live config
+  # BatchJdbcConfig reads via BatchProperties.
+  batch:
+    table-prefix: PIR_BATCH_
+  # SCRUM-88 (M12): second read-write datasource for the HeartbeatWriter liveness
+  # stamp on agt_ops.launch_intent (HeartbeatDatasourceConfig).
+  agtops-db-url: ${DCRE_AGTOPS_DB_URL:jdbc:postgresql://localhost:26257/agt_ops?sslmode=disable}
+  agtops-db-user: ${DCRE_AGTOPS_DB_USER:root}
+  agtops-db-password: ${DCRE_AGTOPS_DB_PASSWORD:}
+  exchange-root: ${DCRE_EXCHANGE_ROOT:../../../../../../infra/dcre-infra/exchange}
+  amount-scale: ${DCRE_AMOUNT_SCALE:2}

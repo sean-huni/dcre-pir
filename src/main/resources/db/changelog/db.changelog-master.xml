@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- PIR owns pir_response in dcre_pay. dcre_pay is a NEW database, so the
+         ledger arrives as a first create (001) rather than as CIR's retrofit,
+         and both changesets guard with onFail="CONTINUE", never MARK_RAN. -->
+    <include file="db/changelog/2026/08/001-pir-response.xml"/>
+    <include file="db/changelog/2026/08/002-batch-metadata.xml"/>
+
+</databaseChangeLog>

@@ -1,0 +1,27 @@
+# SCRUM-42 TEST layout: shadows the platform-batch classpath resource of the same name so
+# `spring.config.import: classpath:dcre-exchange-layout.yml` binds these values under test.
+# root -> build/test-exchange (per-client tree materialized there by ExchangeBootstrap); the PIR
+# initial response lands at <root>/<base>/onhost-resp/out/<client>_<msgId>_<route>_RESP.txt.
+# FNBRF01 is the client every PIR test uses; the three canonical fleet clients mirror production.
+# "UNKNOWN" is deliberately absent: the A-42 headerless/no-client.token fallback must fail closed
+# (no configured dir) rather than write a NACK to a shared/wrong directory (no legacy global dir).
+dcre:
+  exchange:
+    # Activation marker mirrored from the shipped platform-batch yml: this shadow REPLACES that
+    # resource on the test classpath, so it must set the marker itself or ExchangeAutoConfiguration
+    # (@ConditionalOnProperty on dcre.exchange.enabled) backs off and the ExchangeLayout bean vanishes.
+    enabled: true
+    root: ${DCRE_EXCHANGE_ROOT:build/test-exchange}
+    clients:
+      "[FNBCC01]":
+        onhost-resp: { out: fnbcc01/onhost-resp/out, error: fnbcc01/onhost-resp/error, archive: fnbcc01/onhost-resp/archive }
+      "[FNBCC02]":
+        onhost-resp: { out: fnbcc02/onhost-resp/out, error: fnbcc02/onhost-resp/error, archive: fnbcc02/onhost-resp/archive }
+      "[FNBRF01]":
+        onhost-resp: { out: fnbrf01/onhost-resp/out, error: fnbrf01/onhost-resp/error, archive: fnbrf01/onhost-resp/archive }
+      # M2 over-length fixture: a CONFIGURED client whose identity (21 chars) exceeds
+      # pir_response.client VARCHAR(16). tx_header.initg_pty is VARCHAR(35) at source, so resolve
+      # succeeds and only the write-ahead INSERT would blow up with a raw "value too long": this
+      # proves the fail-closed width guard fires BEFORE the insert, not the SQL exception.
+      "[LONGINITIATINGPARTY01]":
+        onhost-resp: { out: longparty01/onhost-resp/out, error: longparty01/onhost-resp/error, archive: longparty01/onhost-resp/archive }
