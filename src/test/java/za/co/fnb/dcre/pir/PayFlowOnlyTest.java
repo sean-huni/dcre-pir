@@ -76,7 +76,7 @@ class PayFlowOnlyTest {
                 .as("PIR reads the payments spine and verdicts; the database is the family"
                         + " discriminator now, so reading dcre_col would compose a payments"
                         + " response out of collections rows and never complain")
-                .contains("${DCRE_PAY_DB_URL:jdbc:postgresql://localhost:26257/dcre_pay")
+                .contains("${DCRE_DB_URL:jdbc:postgresql://localhost:26257/dcre_pay")
                 .doesNotContain("dcre_col");
     }
 

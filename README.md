@@ -114,8 +114,8 @@ Precedence: committed yml default < environment variable. The per-client exchang
 
 | Env | Default | Purpose |
 |---|---|---|
-| `DCRE_PAY_DB_URL` | `jdbc:postgresql://localhost:26257/dcre_pay?sslmode=disable` | the payments CockroachDB via pgwire |
-| `DCRE_PAY_DB_USER` / `DCRE_PAY_DB_PASSWORD` | `root` / empty | DB credentials |
+| `DCRE_DB_URL` | `jdbc:postgresql://localhost:26257/dcre_pay?sslmode=disable` | the payments CockroachDB via pgwire |
+| `DCRE_DB_USER` / `DCRE_DB_PASSWORD` | `root` / empty | DB credentials |
 | `DCRE_EXCHANGE_ROOT` | `../../../../../../infra/dcre-infra/exchange` | Exchange root: per-client response dirs + outcome seam |
 | `DCRE_AGTOPS_DB_URL` / `_USER` / `_PASSWORD` | `…/agt_ops`, `root`, empty | heartbeat liveness stamp (M12) |
 | `DCRE_AMOUNT_SCALE` | `2` | Fleet-wide flag; not read by PIR sources |
