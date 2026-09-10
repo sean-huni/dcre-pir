@@ -10,9 +10,15 @@ spring:
   datasource:
     # dcre_pay, NOT dcre_col: the payments split gives this family its own
     # database, and that database is now the family discriminator.
-    url: ${DCRE_PAY_DB_URL:jdbc:postgresql://localhost:26257/dcre_pay?sslmode=disable}
-    username: ${DCRE_PAY_DB_USER:root}
-    password: ${DCRE_PAY_DB_PASSWORD:}
+    # DCRE_DB_URL is the WIRE CONTRACT with AGT: AGT injects exactly this name into
+    # every stage Job it launches and resolves the VALUE per family
+    # (StageDatabases.urlFor -> Flow.PAY -> payServiceDbUrl). One variable routed per
+    # family, never one variable name per family. This read said DCRE_PAY_DB_URL until
+    # SCRUM-107 and nothing anywhere set that name, so in a pod the service fell back to
+    # the committed localhost default below, which in a pod is the pod itself.
+    url: ${DCRE_DB_URL:jdbc:postgresql://localhost:26257/dcre_pay?sslmode=disable}
+    username: ${DCRE_DB_USER:root}
+    password: ${DCRE_DB_PASSWORD:}
   liquibase:
     change-log: classpath:db/changelog/db.changelog-master.xml
     # Per-service migration history (same isolation idea as PIR_BATCH_)
