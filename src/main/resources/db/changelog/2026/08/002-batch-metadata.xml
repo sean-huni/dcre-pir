@@ -17,9 +17,9 @@
          which is the vendor-lock the pure-XML rule exists to prevent, not an
          instance of it. Same precedent as PRR 002, CIR 002 and MRR. Every CREATE
          carries IF NOT EXISTS, so a pod SIGKILLed mid-migration re-runs the file
-         safely; that is ALSO why this changeset carries no precondition (A-81:
-         one sqlFile creates nine objects, and a precondition sampling one of them
-         reads a half-applied file as complete and skips the rest forever). -->
+         safely; that is ALSO why the precondition on this changeset names ALL NINE objects under
+         one not/and instead of sampling one of them (A-81: a precondition naming a single
+         table reads a half-applied file as complete and skips the rest forever). -->
     <changeSet id="pir-002-batch-metadata" author="dcre">
         <!-- A-82: the fleet's copy of this file gained IF NOT EXISTS after it had
              already been applied, changing the enclosing changeset's checksum. The
@@ -28,6 +28,26 @@
              on a database that already has PIR history. It is APPLICABILITY that
              must stay preserved for this file, not the byte-for-byte checksum. -->
         <validCheckSum>ANY</validCheckSum>
+        <!-- RE-RUN GUARD: marked run only when ALL NINE objects this sqlFile creates are
+             already present. A half-applied file therefore still re-runs, and the
+             IF NOT EXISTS clause on every CREATE makes that re-run safe. Guarding on a
+             single object would reinstate A-81: it reads a half-applied file as complete
+             and skips the rest forever. -->
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <and>
+                    <tableExists tableName="PIR_BATCH_JOB_INSTANCE"/>
+                    <tableExists tableName="PIR_BATCH_JOB_EXECUTION"/>
+                    <tableExists tableName="PIR_BATCH_JOB_EXECUTION_PARAMS"/>
+                    <tableExists tableName="PIR_BATCH_STEP_EXECUTION"/>
+                    <tableExists tableName="PIR_BATCH_STEP_EXECUTION_CONTEXT"/>
+                    <tableExists tableName="PIR_BATCH_JOB_EXECUTION_CONTEXT"/>
+                    <sequenceExists sequenceName="PIR_BATCH_STEP_EXECUTION_SEQ"/>
+                    <sequenceExists sequenceName="PIR_BATCH_JOB_EXECUTION_SEQ"/>
+                    <sequenceExists sequenceName="PIR_BATCH_JOB_INSTANCE_SEQ"/>
+                </and>
+            </not>
+        </preConditions>
         <sqlFile path="db/changelog/2026/08/batch-metadata-pir.sql" splitStatements="true"/>
     </changeSet>
 
