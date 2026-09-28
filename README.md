@@ -104,6 +104,7 @@ No metrics wiring yet (no Actuator/Micrometer dependency): logs, the outcome sea
 - Docker (Testcontainers in the test suite, Paketo image build)
 - Platform libs `za.co.fnb.dcre:platform-*:0.1.0` published to Maven Local (see Quickstart)
 - At runtime: a reachable CockroachDB and the exchange directory tree (`dcre-infra` locally)
+- The `dcre_pay` database must be created by hand (`CREATE DATABASE IF NOT EXISTS dcre_pay;`): dcre-infra's `scripts/crdb-init.sql` creates only `dcre_col`, `agt_ops` and `dcre_man` (checked 2026-09-28).
 
 ## Quickstart
 
@@ -132,7 +133,7 @@ Precedence: committed yml default < environment variable. The per-client exchang
 | `DCRE_DB_URL` | `jdbc:postgresql://localhost:26257/dcre_pay?sslmode=disable` | the payments CockroachDB via pgwire |
 | `DCRE_DB_USER` / `DCRE_DB_PASSWORD` | `root` / empty | DB credentials |
 | `DCRE_EXCHANGE_ROOT` | `../../../../../../infra/dcre-infra/exchange` | Exchange root: per-client response dirs + outcome seam |
-| `DCRE_AGTOPS_DB_URL` / `_USER` / `_PASSWORD` | `…/agt_ops`, `root`, empty | heartbeat liveness stamp (M12) |
+| `DCRE_AGTOPS_DB_URL` / `DCRE_AGTOPS_DB_USER` / `DCRE_AGTOPS_DB_PASSWORD` | `…/agt_ops`, `root`, empty | heartbeat liveness stamp (M12) |
 | `DCRE_AMOUNT_SCALE` | `2` | Fleet-wide flag; not read by PIR sources |
 | `JOB_NAME` | `local-pir-<executionId>` | K8s-injected identity for the outcome seam |
 
