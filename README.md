@@ -1,17 +1,32 @@
 # dcre-pir
 
+> Part of the DCRE fleet. For the fleet map, the rulings and the diagrams that specify every stage, start at the [DCRE design register](https://github.com/sean-huni/dcre-design-register); the complete list of live repositories is its [Repositories](https://github.com/sean-huni/dcre-design-register#repositories) table.
+
 Payments Initial Responder: writes the single per-book ACK/NACK response file for one payments arrival into the per-client `onhost-resp/out` exchange directory. Spring Boot 4.1.0 / Spring Batch 6 / Java 25, launched by AGT as a short-lived Kubernetes Job.
 
 The box caption on the payments sheet is **"Generates Initial Response"**.
 
 ## What it does
 
-PIR is one of the two terminal stages of the payments request DAG:
+| | |
+| --- | --- |
+| Stage code | `PIR` (AGT `Stage.PIR`), captioned "Generates Initial Response" |
+| Family / leg | payments (ENDO), REQ |
+| Trigger | arrival-launched: a DAG successor, one Kubernetes Job per arrival |
+| Upstream | `PAI` (the fork after it); also the family's whole-file NACK responder |
+| Downstream | none (terminal, alongside `PRW`) |
+| Diagram sheet | `dcre-payments-req` in the design register |
+
+PIR is one of the two terminal stages of the payments request DAG. AGT's `RouteDags.ENDO` (checked
+2026-09-28) serves route `onhost-req-endo`:
 
 ```
-PAYMENTS  onhost-req-pay:  PRR -> PTV -> PAI -> { PRW -> Fintegrate request
-                                               || PIR -> OnHost response }
+PAYMENTS  onhost-req-endo:  PRR -> PTV -> PAI -> { PRW -> Fintegrate request
+                                                || PIR -> OnHost response }
 ```
+
+PIR is also the ENDO DAG's `responder`: when a validator (PTV or PAI) rejects the whole file, AGT
+launches PIR with the rejecting verdict as `outcome.hint`.
 
 For one arrival it reads PRR's `tx_header` and PTV's `validation_log` from `dcre_pay`, composes a single ACK/NACK artifact (ACK means accepted-by-DCRE, never submitted-downstream, Fugu F11), and stages it atomically into the arrival client's `onhost-resp/out` directory for OnHost collection. AGT launches PIR for every business outcome of the upstream verdict stage (accepted AND file-fatal files get an initial response), causally independent of the `PRW` writer arm; no downstream DAG stage consumes PIR output. Response format is SYNTHETIC-CONTRACT pending the response-copybook recovery (Q-9).
 
@@ -22,8 +37,8 @@ PIR was forked from [dcre-cir](https://github.com/sean-huni/dcre-cir) and then R
 **CIR carries no `flow` constant to strip**, because it never branched on one: it composes an ACK/NACK from whatever verdicts it finds, and that logic is family-neutral. What it does carry is a COLLECTIONS-shaped identity, which is exactly the kind of thing a rename leaves behind silently, so three surfaces were repointed and are asserted by `PayFlowOnlyTest`:
 
 - **The database.** `dcre_col` becomes `dcre_pay`. This one is the dangerous one: the two schemas are identical, so a PIR still reading `dcre_col` would compose payments responses out of collections verdicts and stay green the whole way.
-- **The routes.** `onhost-req` becomes `onhost-req-pay`, and the A-45 cross-route twin case now uses the second payments route, `fint-resp-pay`. Route is part of arrival identity and is baked into the response FILENAME, so a leftover collections token names a payments response after a collections route.
-- **The verdict vocabulary in the fixtures.** CIR seeds `FAIL_ACCOUNT_NOT_FOUND` and `FAIL_EXCEEDS_MANDATE_CAP`; neither is reachable on the payments leg, since an unknown account passes through to PAI and there is no mandate tier at all. The fixtures now seed `FAIL_ACCOUNT_NOT_ACTIVE` and `FAIL_EXCEEDS_RF_BALANCE`, which PTV can actually emit. The production code is verdict-agnostic, so the FIXTURES are the only place this service's family is visible, which is why the guard scans them.
+- **The routes.** The fixtures and `PayFlowOnlyTest` use `onhost-req-pay` and `fint-resp-pay` as the payments route tokens. **Those are not AGT's route ids**: AGT's payments request route is `onhost-req-endo`, and payments replies share the `fint-resp` channel with collections (AGT `ArrivalService`, checked 2026-09-28). The production code is route-agnostic (`route.id` must match `[a-z0-9-]+`), so in the cluster PIR receives `route.id=onhost-req-endo` and names its files after it; but `PayFlowOnlyTest` currently FORBIDS the literal `onhost-req-endo`. Route is part of arrival identity and is baked into the response FILENAME (A-45).
+- **The verdict vocabulary in the fixtures.** CIR seeds `FAIL_ACCOUNT_NOT_FOUND` and `FAIL_EXCEEDS_MANDATE_CAP`; neither is reachable on the payments leg, since at the time of the fork an unknown account passed through to PAI, and there is no mandate tier at all. The fixtures seed `FAIL_ACCOUNT_NOT_ACTIVE` and `FAIL_EXCEEDS_RF_BALANCE`. Note that PTV's account tier now fails closed and DOES emit `FAIL_ACCOUNT_NOT_FOUND` (PTV `VerdictChain`, checked 2026-09-28), which `PayFlowOnlyTest` still bans from sources and fixtures. The production code is verdict-agnostic, so the FIXTURES are the only place this service's family is visible, which is why the guard scans them.
 
 Also dropped in the reduction: the hand-rolled `Dockerfile` (this repo builds its image with Paketo buildpacks, as PRR does).
 
@@ -42,10 +57,10 @@ One job `pirJob`, one tasklet step `responseStep`, wrapped in the shared `CrdbRe
 Job parameters:
 
 - `arrival.id` (identifying, UUID)
-- `route.id` (non-identifying, REQUIRED: arrival route token matching `[a-z0-9-]+`; part of the response identity, missing/invalid fails the job, A-45). On the payments leg this is `onhost-req-pay`.
-- `fatal.reason` (optional, forces a NACK)
-- `client.token` + `msg.id` (optional, headerless A-42 fallback identity)
-- `outcome.hint` (optional, `BUSINESS_FILE_REJECTED` selects the R-41 policy NACK)
+- `route.id` (non-identifying, REQUIRED: arrival route token matching `[a-z0-9-]+`; part of the response identity, missing/invalid fails the job, A-45). AGT passes `onhost-req-endo`.
+- `fatal.reason` (optional, forces a NACK; AGT does not pass it, it is for manual runs)
+- `client.token` + `msg.id` (headerless A-42 fallback identity; AGT always passes both and refuses to launch when either is blank)
+- `outcome.hint` (optional, `BUSINESS_FILE_REJECTED` selects the R-41 policy NACK; AGT passes the rejecting validator's `BUSINESS_FILE_REJECTED` or `BUSINESS_FILE_FATAL`)
 
 Response lines:
 
@@ -54,7 +69,7 @@ Response lines:
 - `outcome.hint=BUSINESS_FILE_REJECTED`: `NACK|...|0/<total>|FILE_REJECTED_BY_POLICY` itemized with `REJ` lines (R-41 ALL_OR_NOTHING).
 - Headerless arrival (A-42, PRR fataled before persisting the header): NACK with identity from `client.token`/`msg.id` job params, reason defaulting to `NO_HEADER`.
 
-The `REJ` outcomes PIR can emit are exactly the ones PTV writes: `FAIL_ACCOUNT_NOT_ACTIVE`, `FAIL_EXCEEDS_RF_BALANCE`, `FAIL_EXCEEDS_CC_LIMIT`, `FAIL_DUPLICATE_E2E`, `FAIL_DUPLICATE_TX`. PIR itself never interprets them, but the fixtures assert them, so the list is part of this repo's contract with PTV.
+The `REJ` outcomes PIR can emit are whatever PTV writes to `validation_log`: `FAIL_ACCOUNT_NOT_FOUND`, `FAIL_ACCOUNT_NOT_ACTIVE`, `FAIL_EXCEEDS_RF_BALANCE`, `FAIL_EXCEEDS_CC_LIMIT`, `FAIL_DUPLICATE_E2E`, `FAIL_DUPLICATE_TX` (PTV sources, checked 2026-09-28). PIR itself never interprets them.
 
 Target: `<exchange-root>/<clientBase>/onhost-resp/out/<client>_<msgId>_<route>_RESP.txt`, resolved through the `ExchangeLayout` bean (per-client directory map, SCRUM-42). Resolution fails closed for an unconfigured client, so the A-42 `UNKNOWN` fallback never writes to a shared or wrong directory. An existing target is a completed prior emission: the rerun is a restart no-op (R-05), surfaced in the exit status message; the file path lands in the ExecutionContext as `responseFile`.
 
@@ -62,7 +77,7 @@ Outcome seam: on COMPLETED, a `JobExecutionListener` writes `BUSINESS_ACCEPTED` 
 
 ### Database and batch metadata
 
-All in `dcre_pay`. No cross-database read of any kind.
+All in `dcre_pay` (`DCRE_DB_URL` / `DCRE_DB_USER` / `DCRE_DB_PASSWORD`). No cross-database read of any kind. A second datasource, `DCRE_AGTOPS_DB_URL` / `_USER` / `_PASSWORD`, targets `agt_ops` for the `HeartbeatWriter` liveness stamp on `agt_ops.launch_intent`.
 
 Reads (grants-based, R-04/R-06): `tx_header` (PRR-owned) and `validation_log` (PTV-owned). Writes: `pir_response`, the SCRUM-58 write-ahead filename ledger and system of record for every initial ACK/NACK. One row per arrival, committed BEFORE the file is staged; `arrival_id` and `file_name` unique; `route_id` part of identity (A-45); `written_at` NULL after commit is the staged-not-written stuck signal.
 
@@ -85,7 +100,7 @@ No metrics wiring yet (no Actuator/Micrometer dependency): logs, the outcome sea
 
 ## Prerequisites
 
-- Java 25 (`.sdkmanrc` pins `25-tem`; Gradle 9.5.1 wrapper committed)
+- Java 25 (`.sdkmanrc` pins `java=25-tem`); Gradle 9.5.1 via the committed wrapper
 - Docker (Testcontainers in the test suite, Paketo image build)
 - Platform libs `za.co.fnb.dcre:platform-*:0.1.0` published to Maven Local (see Quickstart)
 - At runtime: a reachable CockroachDB and the exchange directory tree (`dcre-infra` locally)
@@ -102,8 +117,8 @@ No metrics wiring yet (no Actuator/Micrometer dependency): logs, the outcome sea
 ./gradlew build
 
 # 3. Run one-shot against local defaults (CockroachDB on localhost:26257, dcre-infra exchange)
-java -jar build/libs/pir-2.0.jar 'arrival.id=<uuid>' route.id=onhost-req-pay                      # ACK path
-java -jar build/libs/pir-2.0.jar 'arrival.id=<uuid>' route.id=onhost-req-pay 'fatal.reason=<why>' # NACK path
+java -jar build/libs/pir-2.0.jar 'arrival.id=<uuid>' route.id=onhost-req-endo                      # ACK path
+java -jar build/libs/pir-2.0.jar 'arrival.id=<uuid>' route.id=onhost-req-endo 'fatal.reason=<why>' # NACK path
 ```
 
 A clean clone runs with NO `.env`: working dev defaults are committed in `application.yml`.
@@ -120,6 +135,8 @@ Precedence: committed yml default < environment variable. The per-client exchang
 | `DCRE_AGTOPS_DB_URL` / `_USER` / `_PASSWORD` | `…/agt_ops`, `root`, empty | heartbeat liveness stamp (M12) |
 | `DCRE_AMOUNT_SCALE` | `2` | Fleet-wide flag; not read by PIR sources |
 | `JOB_NAME` | `local-pir-<executionId>` | K8s-injected identity for the outcome seam |
+
+This table is the documented set, not a closed total: Spring Boot relaxed binding lets any property be overridden by its environment-variable form.
 
 ## Testing
 
@@ -143,12 +160,16 @@ Docker required: Testcontainers CockroachDB `cockroachdb/cockroach:v26.2.3`. Cov
 kind load docker-image --name dcre-dev dcre-pir:2.0
 ```
 
-In the cluster AGT mints PIR as an ephemeral K8s Job with `JOB_NAME` and the identifying parameters; the JobRepository dedupes on them (restart-not-duplicate). Fleet releases are digits-only 3-component SemVer git tags, uniform across the fleet; `scripts/switch-version.sh VERSION` in `dcre-infra` switches the fleet, `scripts/env-reset.sh` resets to a clean slate.
+```bash
+kubectl set env -n dcre deploy/dcre-agt AGT_PIR_IMAGE=dcre-pir:2.0
+```
+
+The cluster comes from `dcre-infra` (`scripts/kind-up.sh`; `scripts/env-reset.sh` for a clean slate). AGT resolves the image from `AGT_PIR_IMAGE` (empty means launch-disabled). `scripts/switch-version.sh` does not export it (its stage roster predates the payments split, checked 2026-09-28), hence the explicit `kubectl set env`. AGT launches the Job in the `dcre-pay` namespace with program args `arrival.id` (identifying), `route.id`, `client.token`, `msg.id` and, on a rejected file, `outcome.hint` (all non-identifying), and env `JOB_NAME`, `DCRE_DB_URL` (the `dcre_pay` URL), `DCRE_EXCHANGE_ROOT=/exchange`, `DCRE_AGTOPS_DB_URL` and `DCRE_AGTOPS_DB_USER`. The JobRepository dedupes on `arrival.id` (restart-not-duplicate).
 
 ## Concerns and follow-ups
 
 - **`platform-response` is not extracted.** The build design sequences PIR after extracting the shared initial-response core out of CIR (`platform-response`, consumed by CIR PIR MIR). This repo was built by the clone-and-reduce method instead, so `InitialResponseService`, `ResponseLedgerWriter` and `CrdbRetry` are currently DUPLICATED between CIR and PIR. That is a real fork risk on a body of logic with fiddly A-42/A-45/R-05 semantics, and the extraction should follow before either copy is changed.
-- **AGT does not know this stage exists yet.** `Stage.PIR`, the `onhost-req-pay` route and `RouteDags.PAY` are AGT edits, listed in the split report, not made here.
+- **Route-token drift in the fixtures and guard.** See "The routes" above: `PayFlowOnlyTest` bans `onhost-req-endo`, the route AGT actually passes, and bans `FAIL_ACCOUNT_NOT_FOUND`, a verdict PTV now emits. Reported for a code fix; not changed by this README.
 
 ## Related repositories
 
