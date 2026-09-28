@@ -152,8 +152,6 @@ In the cluster AGT mints PIR as an ephemeral K8s Job with `JOB_NAME` and the ide
 
 ## Related repositories
 
-- Orchestrator: [dcre-agt](https://github.com/sean-huni/dcre-agt)
-- Payments stages: [dcre-prr](https://github.com/sean-huni/dcre-prr), [dcre-ptv](https://github.com/sean-huni/dcre-ptv), [dcre-pai](https://github.com/sean-huni/dcre-pai), [dcre-prw](https://github.com/sean-huni/dcre-prw)
-- Fork source: [dcre-cir](https://github.com/sean-huni/dcre-cir)
-- Platform libs: [dcre-platform-model](https://github.com/sean-huni/dcre-platform-model), [dcre-platform-files](https://github.com/sean-huni/dcre-platform-files), [dcre-platform-batch](https://github.com/sean-huni/dcre-platform-batch), [dcre-platform-persistence](https://github.com/sean-huni/dcre-platform-persistence)
-- Infra and tooling: [dcre-infra](https://github.com/sean-huni/dcre-infra), [dcre-fixture-toolkit](https://github.com/sean-huni/dcre-fixture-toolkit), [dcre-design-register](https://github.com/sean-huni/dcre-design-register)
+The complete, current list of live DCRE repositories (stage services, orchestrator, platform libraries, infra and tooling) lives in one place: the [DCRE design register README](https://github.com/sean-huni/dcre-design-register#repositories). Deprecated and archived repositories are deliberately absent from it. This README does not copy that list, so it cannot drift.
+
+- Design register: https://github.com/sean-huni/dcre-design-register (start at `docs/specs/DESIGN-REGISTER.md`; the diagrams in `docs/diagrams/` are the specification)
